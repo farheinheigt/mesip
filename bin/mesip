@@ -1,0 +1,68 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
+THIS_DIR="${0:A:h}"
+PROJECT_DIR="${THIS_DIR:h}"
+MANIFEST_PATH="$PROJECT_DIR/Cargo.toml"
+TARGET_DIR="$PROJECT_DIR/target"
+BIN_PATH="$TARGET_DIR/release/mesip"
+
+emit_generic_completion() {
+  local _cmd="mesip"
+  local _fn="_${_cmd//[^A-Za-z0-9_]/_}_completion"
+  cat <<EOC
+#compdef $_cmd
+$_fn() {
+  _arguments \\
+    '(-h --help)'{-h,--help}'[Afficher l aide]' \\
+    '--completion[Generer la completion shell]:shell:(zsh)'
+}
+
+compdef $_fn $_cmd
+EOC
+}
+
+handle_completion_request() {
+  local arg1="${1:-}"
+  local arg2="${2:-}"
+  local completion_file="$THIS_DIR/_mesip.completion.zsh"
+
+  case "$arg1" in
+    --completion)
+      [[ "$arg2" == "zsh" ]] || { print -u2 -- "Usage: mesip --completion zsh"; return 2; }
+      [[ -r "$completion_file" ]] && cat "$completion_file" || emit_generic_completion
+      return 0
+      ;;
+    --completion=*)
+      [[ "${arg1#--completion=}" == "zsh" ]] || { print -u2 -- "Usage: mesip --completion zsh"; return 2; }
+      [[ -r "$completion_file" ]] && cat "$completion_file" || emit_generic_completion
+      return 0
+      ;;
+    completion)
+      [[ "$arg2" == "zsh" ]] || { print -u2 -- "Usage: mesip completion zsh"; return 2; }
+      [[ -r "$completion_file" ]] && cat "$completion_file" || emit_generic_completion
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+if handle_completion_request "$@"; then
+  exit 0
+else
+  completion_rc=$?
+  if (( completion_rc != 1 )); then
+    exit "$completion_rc"
+  fi
+fi
+
+if [[ ! -x "$BIN_PATH" ]]; then
+  env -u CARGO_LOG CARGO_TARGET_DIR="$TARGET_DIR" cargo build --quiet --release --manifest-path "$MANIFEST_PATH"
+elif find "$PROJECT_DIR/src" -type f -newer "$BIN_PATH" -print -quit 2>/dev/null | grep -q .; then
+  env -u CARGO_LOG CARGO_TARGET_DIR="$TARGET_DIR" cargo build --quiet --release --manifest-path "$MANIFEST_PATH"
+elif [[ "$MANIFEST_PATH" -nt "$BIN_PATH" ]]; then
+  env -u CARGO_LOG CARGO_TARGET_DIR="$TARGET_DIR" cargo build --quiet --release --manifest-path "$MANIFEST_PATH"
+fi
+
+exec "$BIN_PATH" "$@"
